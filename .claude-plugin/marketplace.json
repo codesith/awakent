@@ -1,0 +1,13 @@
+{
+  "name": "awakent",
+  "owner": {
+    "name": "John Xiao"
+  },
+  "plugins": [
+    {
+      "name": "awakent",
+      "source": "./",
+      "description": "Keeps the Mac awake exactly while Claude Code sessions are active — pure shell, zero dependencies, bounded by TTL."
+    }
+  ]
+}

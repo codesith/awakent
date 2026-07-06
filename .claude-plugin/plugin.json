@@ -1,0 +1,9 @@
+{
+  "name": "awakent",
+  "version": "0.2.0",
+  "description": "Keeps the Mac awake exactly while Claude Code sessions are active — pure shell, zero dependencies, bounded by TTL.",
+  "author": {
+    "name": "John Xiao"
+  },
+  "license": "MIT"
+}
