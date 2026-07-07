@@ -19,12 +19,25 @@ eng_teardown() {
   rm -rf "$ETD"
 }
 
-# run_eng <subcommand> [stdin]  — engine with sandbox + sleep-pattern + fake pid
+# run_eng <subcommand> [stdin]  - engine with sandbox + sleep-pattern + fake pid
 run_eng() {
   sub="$1"
   input="${2:-$JSON}"
   printf '%s' "$input" | AWAKENT_STATE_DIR="$ETD" AWAKENT_PROC_PATTERN=sleep \
     AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_CAFFEINATE="$REPO_ROOT/tests/caffstub.sh" \
+    /bin/bash "$ENGINE" "$sub"
+}
+
+# run_eng_env <subcommand> <stdin> [VAR=val]...  - like run_eng but with an
+# explicit env: nothing beyond sandbox + caffstub is implied, and trailing
+# pairs win over the implied ones (env is last-assignment-wins), so tests
+# control exactly which of TEST_PID / SESSION_PID / HOST / PROC_PATTERN exist.
+run_eng_env() {
+  sub="$1"
+  input="$2"
+  shift 2
+  printf '%s' "$input" | env AWAKENT_STATE_DIR="$ETD" \
+    AWAKENT_CAFFEINATE="$REPO_ROOT/tests/caffstub.sh" "$@" \
     /bin/bash "$ENGINE" "$sub"
 }
 
@@ -63,7 +76,7 @@ test_tc202_218_failure_injection_state_dir() {
   assert_exit 0 $? "TC-202 unwritable state dir exits 0"
   assert_empty "$out" "TC-202 unwritable state dir silent"
   chmod 700 "$ro"
-  # NOTE: never probe with '' — bash ${VAR:-default} treats empty as unset,
+  # NOTE: never probe with '' - bash ${VAR:-default} treats empty as unset,
   # so '' resolves to the user's REAL ~/.claude/awakent (correct engine
   # behavior, wrong test target).
   for bad in "/dev/null/x" "/etc/hosts/x"; do
@@ -172,7 +185,7 @@ test_tc208_reaper_edges() {
   # dead PID
   sleep 300 & dead=$!; kill -9 "$dead" 2>/dev/null; wait "$dead" 2>/dev/null
   printf '%s\n' "$dead" > "$ETD/sessions/dead-one"
-  # live but wrong name — must NOT be the engine's $$/$PPID (self-exclusion),
+  # live but wrong name - must NOT be the engine's $$/$PPID (self-exclusion),
   # so spawn a distinct long-lived non-sleep process.
   tail -f /dev/null >/dev/null 2>&1 &
   WRONG_PID=$!
@@ -231,6 +244,174 @@ test_tc217_malformed_stdin() {
   assert_eq "0" "$cnt" "TC-217 no registry mutation from malformed input"
   # traversal guard: '../evil' must not have created anything outside sessions
   if [ ! -e "$ETD/evil" ]; then pass "TC-217 no path traversal artifact"; else fail "TC-217 traversal artifact created"; fi
+  eng_teardown
+}
+
+test_tc230_host_prefix() {
+  eng_setup
+  # valid host -> prefixed file
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_HOST=codex >/dev/null 2>&1
+  if [ -e "$ETD/sessions/codex-eng-test-1" ]; then pass "TC-230 host-prefixed file created"; else fail "TC-230 prefixed file missing"; fi
+  assert_eq "codex" "$(sed -n '3p' "$ETD/sessions/codex-eng-test-1")" "TC-230 host recorded on line 3"
+  out=$(run_eng_env status "$JSON" AWAKENT_PROC_PATTERN=sleep AWAKENT_TEST_PID="$FAKE_PID" 2>/dev/null)
+  case "$out" in
+    *"session: codex-eng-test-1 host=codex 0m ago"*) pass "TC-230 status shows host" ;;
+    *) fail "TC-230 status host display: $out" ;;
+  esac
+  # host-matched unregister removes exactly the prefixed file
+  run_eng_env unregister "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_HOST=codex >/dev/null 2>&1
+  if [ ! -e "$ETD/sessions/codex-eng-test-1" ]; then pass "TC-230 host-matched unregister"; else fail "TC-230 prefixed file survived unregister"; fi
+  # invalid hosts (charset, case, length) fall back to bare claude naming
+  for badhost in '../ev il' 'UPPER' 'toolonghostname12345'; do
+    run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+      AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_HOST="$badhost" >/dev/null 2>&1
+    if [ -e "$ETD/sessions/eng-test-1" ]; then pass "TC-230 invalid host '$badhost' -> bare file"; else fail "TC-230 invalid host '$badhost' registered nothing"; fi
+    rm -f "$ETD/sessions/eng-test-1"
+  done
+  # no traversal artifact from the '../' host attempt
+  if [ ! -e "$ETD/evil" ] && [ ! -e "$(dirname "$ETD")/ev il-eng-test-1" ]; then
+    pass "TC-230 no path traversal artifact from host tag"
+  else
+    fail "TC-230 host tag produced traversal artifact"
+  fi
+  eng_teardown
+}
+
+test_tc231_per_file_pattern() {
+  eng_setup
+  # registration records the effective pattern on line 2
+  run_eng register >/dev/null 2>&1
+  assert_eq "sleep" "$(sed -n '2p' "$ETD/sessions/eng-test-1")" "TC-231 pattern recorded on line 2"
+  # second live process with a different name, its own recorded pattern
+  tail -f /dev/null >/dev/null 2>&1 &
+  TAIL_PID=$!
+  printf '%s\ntail\n' "$TAIL_PID" > "$ETD/sessions/other-host"
+  # reap under a foreign global pattern: both files judged by their OWN
+  # line 2, so both survive - the invoker's env must not matter.
+  run_eng_env reap "$JSON" AWAKENT_PROC_PATTERN=nomatch >/dev/null 2>&1
+  if [ -e "$ETD/sessions/eng-test-1" ] && [ -e "$ETD/sessions/other-host" ]; then
+    pass "TC-231 cross-host reap keeps both (per-file patterns)"
+  else
+    fail "TC-231 cross-host reap deleted a live session"
+  fi
+  # a live PID whose recorded pattern mismatches is reaped, never signaled
+  printf '%s\nsleep\n' "$TAIL_PID" > "$ETD/sessions/mismatch"
+  run_eng reap >/dev/null 2>&1
+  if [ ! -e "$ETD/sessions/mismatch" ]; then pass "TC-231 pattern-mismatched pid reaped"; else fail "TC-231 mismatch not reaped"; fi
+  if kill -0 "$TAIL_PID" 2>/dev/null; then pass "TC-231 mismatched process NOT killed"; else fail "TC-231 mismatched process killed"; fi
+  kill "$TAIL_PID" 2>/dev/null; wait "$TAIL_PID" 2>/dev/null
+  # legacy one-line file falls back to the global pattern
+  printf '%s\n' "$FAKE_PID" > "$ETD/sessions/legacy-file"
+  run_eng reap >/dev/null 2>&1
+  if [ -e "$ETD/sessions/legacy-file" ]; then pass "TC-231 legacy one-line file kept via global fallback"; else fail "TC-231 legacy file wrongly reaped"; fi
+  # corrupt line-2 regex (bad charset) falls back rather than being evaluated
+  printf '%s\n(evil\n' "$FAKE_PID" > "$ETD/sessions/corrupt-pat"
+  run_eng reap >/dev/null 2>&1
+  if [ -e "$ETD/sessions/corrupt-pat" ]; then pass "TC-231 corrupt pattern -> global fallback (kept)"; else fail "TC-231 corrupt pattern misjudged"; fi
+  eng_teardown
+}
+
+test_tc232_sentinel_lifecycle() {
+  eng_setup
+  # sentinel register: SESSION_PID=0, no TEST_PID in env
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_SESSION_PID=0 >/dev/null 2>&1
+  assert_eq "0" "$(head -n 1 "$ETD/sessions/eng-test-1")" "TC-232 sentinel pid 0 recorded"
+  # fresh sentinel survives a reap - regression test for kill -0 0
+  run_eng_env reap "$JSON" AWAKENT_PROC_PATTERN=sleep >/dev/null 2>&1
+  if [ -e "$ETD/sessions/eng-test-1" ]; then pass "TC-232 fresh sentinel survives reap"; else fail "TC-232 sentinel insta-reaped (kill -0 0 bug)"; fi
+  # status reports it live and ttl-only
+  out=$(run_eng_env status "$JSON" AWAKENT_PROC_PATTERN=sleep 2>/dev/null)
+  case "$out" in
+    *"session: eng-test-1 host=claude 0m ago (ttl-only)"*) pass "TC-232 status shows ttl-only session" ;;
+    *) fail "TC-232 status shape: $out" ;;
+  esac
+  # TTL expiry still reaps it
+  touch -t 202001010000 "$ETD/sessions/eng-test-1"
+  run_eng_env reap "$JSON" AWAKENT_PROC_PATTERN=sleep >/dev/null 2>&1
+  if [ ! -e "$ETD/sessions/eng-test-1" ]; then pass "TC-232 expired sentinel reaped"; else fail "TC-232 expired sentinel survived"; fi
+  # garbage SESSION_PID fails closed to sentinel, never to $PPID
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_SESSION_PID=abc >/dev/null 2>&1
+  assert_eq "0" "$(head -n 1 "$ETD/sessions/eng-test-1")" "TC-232 garbage SESSION_PID -> sentinel"
+  eng_teardown
+}
+
+test_tc233_pid_precedence() {
+  eng_setup
+  # TEST_PID beats SESSION_PID
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_SESSION_PID=99999 >/dev/null 2>&1
+  assert_eq "$FAKE_PID" "$(head -n 1 "$ETD/sessions/eng-test-1")" "TC-233 TEST_PID wins over SESSION_PID"
+  rm -f "$ETD/sessions/eng-test-1"
+  # SESSION_PID beats $PPID
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep \
+    AWAKENT_SESSION_PID="$FAKE_PID" >/dev/null 2>&1
+  assert_eq "$FAKE_PID" "$(head -n 1 "$ETD/sessions/eng-test-1")" "TC-233 SESSION_PID wins over PPID"
+  rm -f "$ETD/sessions/eng-test-1"
+  # neither -> $PPID (a real positive pid, never the sentinel)
+  run_eng_env register "$JSON" AWAKENT_PROC_PATTERN=sleep >/dev/null 2>&1
+  got=$(head -n 1 "$ETD/sessions/eng-test-1")
+  case "$got" in
+    ''|0|*[!0-9]*) fail "TC-233 PPID fallback wrong: '$got'" ;;
+    *) pass "TC-233 PPID fallback is a real pid" ;;
+  esac
+  eng_teardown
+}
+
+test_tc234_session_id_fallbacks() {
+  eng_setup
+  run_eng register '{"conversation_id":"conv-1"}' >/dev/null 2>&1
+  if [ -e "$ETD/sessions/conv-1" ]; then pass "TC-234 conversation_id registers"; else fail "TC-234 conversation_id ignored"; fi
+  run_eng register '{"sessionId":"sess-2"}' >/dev/null 2>&1
+  if [ -e "$ETD/sessions/sess-2" ]; then pass "TC-234 sessionId registers"; else fail "TC-234 sessionId ignored"; fi
+  run_eng register '{"conversation_id":"conv-3","session_id":"sid-3"}' >/dev/null 2>&1
+  if [ -e "$ETD/sessions/sid-3" ] && [ ! -e "$ETD/sessions/conv-3" ]; then
+    pass "TC-234 session_id wins when both present"
+  else
+    fail "TC-234 precedence wrong with both keys"
+  fi
+  run_eng register '{"conversation_id":"../evil"}' >/dev/null 2>&1
+  if [ ! -e "$ETD/evil" ] && [ ! -e "$ETD/sessions/../evil" ] 2>/dev/null; then
+    pass "TC-234 bad-charset conversation_id rejected"
+  else
+    fail "TC-234 bad-charset conversation_id accepted"
+  fi
+  eng_teardown
+}
+
+test_tc235_caffeinate_absent() {
+  eng_setup
+  for sub in register touch unregister reap; do
+    out=$(run_eng_env "$sub" "$JSON" AWAKENT_PROC_PATTERN=sleep \
+      AWAKENT_TEST_PID="$FAKE_PID" AWAKENT_DEBUG=1 \
+      AWAKENT_CAFFEINATE=/nonexistent/caffeinate 2>/dev/null)
+    assert_exit 0 $? "TC-235 '$sub' exits 0 without caffeinate"
+    assert_empty "$out" "TC-235 '$sub' silent without caffeinate"
+  done
+  # zero state written - not even the debug log
+  cnt=0; for f in "$ETD"/* "$ETD"/.[!.]*; do [ -e "$f" ] && cnt=$((cnt+1)); done
+  assert_eq "0" "$cnt" "TC-235 zero writes to state dir"
+  out=$(run_eng_env status "$JSON" AWAKENT_CAFFEINATE=/nonexistent/caffeinate 2>/dev/null)
+  assert_exit 0 $? "TC-235 status exits 0 without caffeinate"
+  case "$out" in
+    "assertion: unsupported"*) pass "TC-235 status reports unsupported" ;;
+    *) fail "TC-235 status without caffeinate: $out" ;;
+  esac
+  eng_teardown
+}
+
+test_tc236_observed_comm_pattern() {
+  eng_setup
+  # no AWAKENT_PROC_PATTERN, no host: the default-host path records the
+  # observed process name of the session pid (here the fake sleep).
+  run_eng_env register "$JSON" AWAKENT_TEST_PID="$FAKE_PID" >/dev/null 2>&1
+  assert_eq "sleep" "$(sed -n '2p' "$ETD/sessions/eng-test-1")" "TC-236 observed parent comm recorded as pattern"
+  # and the recorded pattern keeps the session alive through a reap
+  run_eng_env reap "$JSON" >/dev/null 2>&1
+  if [ -e "$ETD/sessions/eng-test-1" ]; then pass "TC-236 session survives reap under observed pattern"; else fail "TC-236 session reaped despite live observed-comm match"; fi
   eng_teardown
 }
 

@@ -4,11 +4,11 @@ description: Set awakent config: ttl_minutes, lid_closed_mode, debug
 
 The user wants to view or change awakent's configuration. Their input (may be empty): $ARGUMENTS
 
-awakent's config lives in the file `~/.claude/awakent/config` (`key=value` lines, parsed as data, never executed). That file is the single source of truth; this command is only a guided editor for it. Exactly three keys exist:
+awakent's config lives in the file `~/.claude/awakent/config` (`key=value` lines, parsed as data, never executed). That file is the single source of truth; this command is only a guided editor for it. One config governs every supported host (Claude Code, Codex, Cursor, Copilot, pi). Exactly three keys exist:
 
 | Key | Default | Valid values | Meaning |
 | --- | --- | --- | --- |
-| `ttl_minutes` | `60` | integer 5–1440 | Release the wake assertion this long after the last activity |
+| `ttl_minutes` | `60` | integer 5-1440 | Release the wake assertion this long after the last activity |
 | `lid_closed_mode` | `0` | `0`, `1`, `true`, `false` | `1`/`true`: also hold the display awake (`caffeinate -is`) so lid-closed on AC survives |
 | `debug` | `0` | `0`, `1`, `true`, `false` | `1`/`true`: log events (session ids only) to `~/.claude/awakent/awakent.log` |
 

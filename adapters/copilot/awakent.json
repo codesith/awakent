@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      { "type": "command", "bash": "AWAKENT_HOST=copilot \"$HOME/.claude/hooks/awakent.sh\" register", "timeoutSec": 10 }
+    ],
+    "userPromptSubmitted": [
+      { "type": "command", "bash": "AWAKENT_HOST=copilot \"$HOME/.claude/hooks/awakent.sh\" touch", "timeoutSec": 10 }
+    ],
+    "postToolUse": [
+      { "type": "command", "bash": "AWAKENT_HOST=copilot \"$HOME/.claude/hooks/awakent.sh\" touch", "timeoutSec": 10 }
+    ],
+    "agentStop": [
+      { "type": "command", "bash": "AWAKENT_HOST=copilot \"$HOME/.claude/hooks/awakent.sh\" touch", "timeoutSec": 10 }
+    ],
+    "sessionEnd": [
+      { "type": "command", "bash": "AWAKENT_HOST=copilot \"$HOME/.claude/hooks/awakent.sh\" unregister", "timeoutSec": 10 }
+    ]
+  }
+}

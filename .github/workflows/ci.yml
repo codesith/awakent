@@ -16,7 +16,7 @@ jobs:
       - name: Install shellcheck (CI-only tool, never a runtime dependency)
         run: brew install shellcheck
 
-      # Gate 1 — shellcheck on every script (*.sh or shell-shebang first line)
+      # Gate 1 - shellcheck on every script (*.sh or shell-shebang first line)
       - name: Gate 1 - shellcheck
         run: |
           files=""
@@ -34,24 +34,28 @@ jobs:
             shellcheck --severity=warning $files
           fi
 
-      # Gate 2 — run the whole suite under the runner's /bin/bash, which is
+      # Gate 2 - run the whole suite under the runner's /bin/bash, which is
       # Apple's bash 3.2: any 4.x-ism in an executed path fails here
       - name: Gate 2 - bash 3.2 + test harness
         run: |
           /bin/bash -c 'echo "bash major version: ${BASH_VERSINFO[0]}"'
           /bin/bash tests/run.sh
 
-      # Gate 3 — no network primitives in product code. The pattern must
+      # Gate 3 - no network primitives in product code. The pattern must
       # byte-match NET_PATTERN in tests/test_stub.sh (drift is a test failure).
       - name: Gate 3 - network primitives
         run: |
-          if grep -rEn 'curl|wget|(^|[^a-zA-Z])nc([^a-zA-Z]|$)|/dev/tcp|osascript.*URL' hooks/ commands/; then
+          if grep -rEn 'curl|wget|(^|[^a-zA-Z])nc([^a-zA-Z]|$)|/dev/tcp|osascript.*URL' hooks/ commands/ adapters/ skills/; then
             echo "network primitive found in product code" >&2
             exit 1
           fi
           echo "clean"
 
-      # Gate 4 — manifest validity (python3 is preinstalled on the runner;
-      # it is a CI convenience, never a user-facing dependency)
+      # Gate 4 - manifest and adapter JSON validity (python3 is preinstalled
+      # on the runner; it is a CI convenience, never a user-facing dependency)
       - name: Gate 4 - manifest validity
-        run: python3 -m json.tool .claude-plugin/plugin.json
+        run: |
+          for j in .claude-plugin/*.json .codex-plugin/*.json hooks/hooks.json adapters/*/*.json; do
+            echo "validating $j"
+            python3 -m json.tool "$j" > /dev/null
+          done

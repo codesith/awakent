@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      { "command": "AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \"$HOME/.claude/hooks/awakent.sh\" register", "timeout": 10 }
+    ],
+    "beforeSubmitPrompt": [
+      { "command": "AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \"$HOME/.claude/hooks/awakent.sh\" touch", "timeout": 10 }
+    ],
+    "postToolUse": [
+      { "command": "AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \"$HOME/.claude/hooks/awakent.sh\" touch", "timeout": 10 }
+    ],
+    "stop": [
+      { "command": "AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \"$HOME/.claude/hooks/awakent.sh\" touch", "timeout": 10 }
+    ],
+    "sessionEnd": [
+      { "command": "AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \"$HOME/.claude/hooks/awakent.sh\" unregister", "timeout": 10 }
+    ]
+  }
+}

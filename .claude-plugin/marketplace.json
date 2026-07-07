@@ -7,7 +7,7 @@
     {
       "name": "awakent",
       "source": "./",
-      "description": "Keeps the Mac awake exactly while Claude Code sessions are active — pure shell, zero dependencies, bounded by TTL."
+      "description": "Keeps the Mac awake exactly while agent sessions are active (Claude Code, Codex, Cursor, Copilot, pi) - pure shell, zero dependencies, bounded by TTL."
     }
   ]
 }

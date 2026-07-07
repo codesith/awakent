@@ -17,7 +17,7 @@ test_tc401_command_body_pins() {
   # shellcheck disable=SC2088  # literal doc-text search target, not a path
   grep -qF '~/.claude/awakent/config' "$CFG_CMD"
   assert_exit 0 $? "TC-401 config path present"
-  grep -q '5–1440\|5-1440\|from 5 to 1440' "$CFG_CMD"
+  grep -q '5-1440\|5-1440\|from 5 to 1440' "$CFG_CMD"
   assert_exit 0 $? "TC-401 bounds 5-1440 present"
   grep -q '`0`, `1`, `true`, `false`' "$CFG_CMD"
   assert_exit 0 $? "TC-401 boolean value set present"
@@ -63,6 +63,6 @@ test_tc403_readme_pins() {
   assert_exit 0 $? "TC-403 file-edit path retained"
   grep -qi 'single source of truth' "$CFG_README"
   assert_exit 0 $? "TC-403 source-of-truth statement"
-  grep -q '5–1440\|5-1440' "$CFG_README"
+  grep -q '5-1440\|5-1440' "$CFG_README"
   assert_exit 0 $? "TC-403 bounds shown in README (BR-3)"
 }

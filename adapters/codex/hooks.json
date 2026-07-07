@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AWAKENT_HOST=codex \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/awakent.sh\" register",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AWAKENT_HOST=codex \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/awakent.sh\" touch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AWAKENT_HOST=codex \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/awakent.sh\" touch",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AWAKENT_HOST=codex \"${PLUGIN_ROOT:-$CLAUDE_PLUGIN_ROOT}/hooks/awakent.sh\" touch",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

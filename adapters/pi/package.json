@@ -1,0 +1,16 @@
+{
+  "name": "awakent-pi",
+  "version": "0.3.0",
+  "description": "awakent adapter for pi: keeps the Mac awake exactly while pi sessions are active",
+  "license": "MIT",
+  "author": "John Xiao",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codesith/awakent.git",
+    "directory": "adapters/pi"
+  },
+  "keywords": ["pi-package"],
+  "pi": {
+    "extensions": ["./awakent.ts"]
+  }
+}

@@ -4,6 +4,26 @@ All notable changes to awakent. Format follows [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-07
+
+Multi-agent support: the same engine now covers OpenAI Codex CLI, Cursor, GitHub Copilot (CLI + VS Code agent mode), and pi, sharing one registry and exactly one caffeinate across all hosts.
+
+### Added
+- Host-tagged session files: adapters set `AWAKENT_HOST=<host>`; non-Claude sessions register as `sessions/<host>-<session_id>` (Claude files stay bare - no migration).
+- Per-session process pattern (session file line 2): the reaper judges each session by the pattern recorded at its own registration, so a reap triggered from one host can never misjudge another host's PIDs. Legacy one-line files fall back to the global pattern. For the default host the observed parent-process name is recorded, so Claude-hooks-compatible hosts work correctly even without `AWAKENT_HOST`.
+- TTL-only sentinel mode (`AWAKENT_SESSION_PID=0`) for hosts that expose no PID to hooks (Cursor): no liveness check, TTL expiry alone governs. Invalid `AWAKENT_SESSION_PID` fails closed to the sentinel.
+- Session-id extraction fallbacks: `conversation_id` (Cursor) and `sessionId` (Copilot CLI) accepted after `session_id`.
+- Adapters under `adapters/`: Codex plugin hooks (`.codex-plugin/` + `adapters/codex/hooks.json`), Cursor `hooks.json` template, Copilot `awakent.json` (verified live against Copilot CLI 1.0.68), pi TypeScript extension (`adapters/pi/`).
+- Full no-op when `caffeinate` is absent: on non-macOS machines sharing a cross-platform hooks config, awakent exits silently and writes zero state.
+- Status/config command surfaces for every host: canonical `skills/awakent-status` + `skills/awakent-config` (SKILL.md format; wired into the Codex plugin manifest, copied for Copilot - verified live - and pi), Cursor slash commands (`adapters/cursor/commands/`), with `bash ~/.claude/hooks/awakent.sh status` as the universal shell fallback. Claude Code keeps its native `/awakent:status` and `/awakent:config`.
+
+### Changed
+- `status` labels every session with its agent (`host=claude|codex|cursor|copilot|pi`, recorded at registration) and marks sentinel sessions with `(ttl-only)`.
+
+### Fixed
+- Registration now writes the session file under the mutex, closing a race where a concurrent reaper could read a session file mid-truncation.
+- `pid_name_matches` passes patterns with `grep -E -e`, so a pattern starting with `-` can never be parsed as a grep flag.
+
 ## [0.2.0] - 2026-07-06
 
 First public release.

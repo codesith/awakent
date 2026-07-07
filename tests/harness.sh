@@ -1,8 +1,8 @@
 #!/bin/bash
-# Scenario harness: simulates Claude Code sessions
-# without Claude Code. Callable standalone (`/bin/bash tests/harness.sh`)
+# Scenario harness: simulates agent sessions (Claude Code and other hosts)
+# without any real host. Callable standalone (`/bin/bash tests/harness.sh`)
 # for manual runs (M4 foundation); tests/test_harness_scenarios.sh wraps it
-# for the run.sh suite. Uses REAL caffeinate (short -t) — the argv-recording
+# for the run.sh suite. Uses REAL caffeinate (short -t) - the argv-recording
 # stub (caffstub.sh) is used only where flags are asserted (TC-220).
 
 HARNESS_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -86,7 +86,7 @@ h_teardown() {
 
 h_count_caffeinates() {
   # Count only awakent-shaped caffeinates (our exact argv with the 300s test
-  # TTL) — immune to unrelated caffeinate processes on the machine.
+  # TTL) - immune to unrelated caffeinate processes on the machine.
   ps -axo command= 2>/dev/null | grep -c 'caffeinate -is\{0,1\} -t 300$'
 }
 
@@ -116,7 +116,7 @@ scenario_210_single_lifecycle() {
   fi
   out=$(h_run status s210 "$p" 2>/dev/null)
   case "$out" in
-    "assertion: held"*"session: s210 0m ago"*) pass "TC-210 status reports held + session" ;;
+    "assertion: held"*"session: s210 host=claude 0m ago"*) pass "TC-210 status reports held + session + host" ;;
     *) fail "TC-210 status shape: $out" ;;
   esac
   h_run touch s210 "$p" >/dev/null 2>&1
@@ -171,7 +171,7 @@ scenario_213_register_storm() {
     storm_pids="$storm_pids $!"
     i=$((i+1))
   done
-  # Wait ONLY on the storm invocations — a bare `wait` would also block on
+  # Wait ONLY on the storm invocations - a bare `wait` would also block on
   # the fake-session `sleep 300` background jobs.
   for sp in $storm_pids; do
     wait "$sp" 2>/dev/null
@@ -283,6 +283,37 @@ scenario_220_config_flags() {
   done
 }
 
+scenario_222_mixed_host() {
+  h_setup
+  p=$(h_fake_session)
+  before=$(h_count_caffeinates)
+  # claude session (bare filename, real fake PID) + cursor sentinel session
+  # (prefixed, pid 0, ttl-only) sharing one registry.
+  h_run register s222claude "$p" >/dev/null 2>&1
+  printf '{"session_id":"s222cur"}' | \
+    AWAKENT_STATE_DIR="$H_SANDBOX" AWAKENT_HOST=cursor AWAKENT_SESSION_PID=0 \
+    /bin/bash "$HENGINE" register >/dev/null 2>&1
+  if [ -e "$H_SANDBOX/sessions/s222claude" ] && [ -e "$H_SANDBOX/sessions/cursor-s222cur" ]; then
+    pass "TC-222 both hosts registered (bare + prefixed)"
+  else
+    fail "TC-222 registry files wrong"
+  fi
+  after=$(h_count_caffeinates)
+  assert_eq "1" "$((after - before))" "TC-222 exactly one caffeinate across hosts"
+  # claude session dies -> reaped; cursor sentinel must survive and keep
+  # the assertion (judged by its own file, not the invoker's pattern).
+  kill -9 "$p" 2>/dev/null; wait "$p" 2>/dev/null
+  h_run reap - "$p" >/dev/null 2>&1
+  if [ ! -e "$H_SANDBOX/sessions/s222claude" ]; then pass "TC-222 dead claude session reaped"; else fail "TC-222 dead claude session kept"; fi
+  if [ -e "$H_SANDBOX/sessions/cursor-s222cur" ]; then pass "TC-222 cursor sentinel survives foreign reap"; else fail "TC-222 cursor sentinel wrongly reaped"; fi
+  h_caff_alive; assert_exit 0 $? "TC-222 assertion held for sentinel session"
+  # sentinel expires by TTL -> released
+  touch -t 202001010000 "$H_SANDBOX/sessions/cursor-s222cur"
+  h_run reap - "$p" >/dev/null 2>&1
+  if h_caff_alive; then fail "TC-222 assertion survived sentinel expiry"; else pass "TC-222 released after sentinel TTL expiry"; fi
+  h_teardown
+}
+
 # Vocabulary scan over all harness debug logs is run by the
 # wrapper (test_harness_scenarios.sh) which enables AWAKENT_DEBUG per scenario.
 
@@ -295,6 +326,7 @@ h_run_all() {
   scenario_215_recycled_caff_pid
   scenario_216_touch_behavior
   scenario_220_config_flags
+  scenario_222_mixed_host
 }
 
 if [ "$HARNESS_STANDALONE" = "1" ]; then

@@ -5,5 +5,7 @@
   "author": {
     "name": "John Xiao"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "hooks": "./adapters/codex/hooks.json",
+  "skills": ["./skills/awakent-status", "./skills/awakent-config"]
 }

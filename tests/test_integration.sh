@@ -31,7 +31,7 @@ PYEOF
 
 test_tc307_marketplace_json() {
   # .claude-plugin/marketplace.json makes the repo installable via
-  # `claude plugin marketplace add` (CLI/VS Code path) — discovered required
+  # `claude plugin marketplace add` (CLI/VS Code path) - discovered required
   # during first real install; README §Install documents this path.
   python3 - "$REPO_ROOT/.claude-plugin/marketplace.json" <<'PYEOF'
 import json, sys

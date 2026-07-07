@@ -26,6 +26,9 @@ test_s214() { scenario_214_ttl_expiry; }
 test_s215() { scenario_215_recycled_caff_pid; }
 test_s216() { scenario_216_touch_behavior; }
 test_s220() { scenario_220_config_flags; }
+# Named s220b so it sorts before the s221 vocabulary scan (tests run in
+# declare -F alphabetical order and the scan deletes the collected logs).
+test_s220b_mixed_host() { scenario_222_mixed_host; }
 
 test_s221_log_vocabulary_scan() {
   total=0; bad=0
