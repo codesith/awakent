@@ -11,6 +11,11 @@
 
 umask 077
 
+# Bytewise pattern semantics everywhere: without this, case-glob and regex
+# ranges like [a-z] collate locale-dependently (en_US.UTF-8 puts uppercase
+# inside a-z), and host/charset validation would vary by machine.
+export LC_ALL=C
+
 # ---------------------------------------------------------------------------
 # State paths. AWAKENT_STATE_DIR is a documented test-only override;
 # nonsense values fail closed via the containment wrapper.

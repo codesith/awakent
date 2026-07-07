@@ -23,6 +23,7 @@ Multi-agent support: the same engine now covers OpenAI Codex CLI, Cursor, GitHub
 ### Fixed
 - Registration now writes the session file under the mutex, closing a race where a concurrent reaper could read a session file mid-truncation.
 - `pid_name_matches` passes patterns with `grep -E -e`, so a pattern starting with `-` can never be parsed as a grep flag.
+- The engine exports `LC_ALL=C` so glob and regex ranges are bytewise everywhere: under en_US.UTF-8 collation, `[a-z]` admits uppercase, which let invalid host tags through on machines with that locale.
 
 ## [0.2.0] - 2026-07-06
 
